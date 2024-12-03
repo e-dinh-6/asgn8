@@ -71,6 +71,10 @@ func main() {
 		{"equal?", PrimV{"equal?"}},
 		{"true", BoolV{true}},
 		{"false", BoolV{false}},
+		{"println", PrimV{"println"}},
+		{"read-num", PrimV{"read-num"}},
+		{"read-str", PrimV{"read-str"}},
+		{"++", PrimV{"++"}},
 	}
 	fmt.Println(topEnv)
 }
