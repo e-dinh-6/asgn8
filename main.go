@@ -6,28 +6,35 @@ import (
 	"strconv"
 )
 
+// custom type because Go doesn't have Symbols
+type Symbol string
+
+func (s Symbol) Equals(other Symbol) bool {
+	return s == other
+}
+
 // ExprC ----------------
 type ExprC interface{}
 type NumC struct {
 	n float64
 }
-type AppC struct {
-	fun  ExprC
-	args []ExprC
-}
 type StrC struct {
 	str string
+}
+type IdC struct {
+	name Symbol
 }
 type IfC struct {
 	cond  ExprC
 	True  ExprC
 	False ExprC
 }
-type IdC struct {
-	name string
+type AppC struct {
+	fun  ExprC
+	args []ExprC
 }
 type LamC struct {
-	args []string
+	args []Symbol
 	body ExprC
 }
 
@@ -46,18 +53,18 @@ type BoolV struct {
 	b bool
 }
 type CloV struct {
-	params  []string
+	params  []Symbol
 	body    ExprC
 	clo_env Env
 }
 type PrimV struct {
-	operand string
+	operand Symbol
 }
 
 // Environment -----------
 type Env []Binding
 type Binding struct {
-	name string
+	name Symbol
 	val  Value
 }
 
@@ -71,9 +78,12 @@ var topEnv = []Binding{
 	{"equal?", PrimV{"equal?"}},
 	{"true", BoolV{true}},
 	{"false", BoolV{false}},
+	{"println", PrimV{"println"}},
+	{"read-num", PrimV{"read-num"}},
+	{"read-str", PrimV{"read-str"}},
 }
 
-func lookup(name string, env Env) (Value, error) {
+func lookup(name Symbol, env Env) (Value, error) {
 	for _, binding := range env {
 		if binding.name == name {
 			return binding.val, nil
@@ -136,6 +146,7 @@ func interp(expr ExprC, env Env) (Value, error) {
 			}
 			// extend env
 			newEnv := extendEnv(f.params, interped_args, f.clo_env)
+
 			return interp(f.body, newEnv)
 		default:
 			return nil, fmt.Errorf("AAQZ: invalid function value in AppC: %v", funVal)
@@ -144,16 +155,16 @@ func interp(expr ExprC, env Env) (Value, error) {
 	return nil, fmt.Errorf("AAQZ: expression is not an ExprC %v", expr)
 }
 
-func extendEnv(params []string, args []Value, env Env) (Env) {
-    extendedEnv := append([]Binding{}, env...)
-    for i := 0; i < len(params); i++ {
-        extendedEnv = append(extendedEnv, Binding{name: params[i], val: args[i]})
-    }
-    return extendedEnv
+func extendEnv(params []Symbol, args []Value, env Env) Env {
+	extendedEnv := append([]Binding{}, env...)
+	for i := 0; i < len(params); i++ {
+		extendedEnv = append(extendedEnv, Binding{name: params[i], val: args[i]})
+	}
+	return extendedEnv
 }
 
-func applyPrim(op string, values []Value) (Value, error) {
-	switch op{
+func applyPrim(op Symbol, values []Value) (Value, error) {
+	switch op {
 	case "println":
 		if len(values) != 1 {
 			return nil, fmt.Errorf("AAQZ: `println` expects 1 argument, got: %v", values)
@@ -161,7 +172,7 @@ func applyPrim(op string, values []Value) (Value, error) {
 		val := values[0]
 		switch val := val.(type) {
 		case StrV:
-			fmt.Println(val)
+			fmt.Println(val.str)
 			return BoolV{b: true}, nil
 		default:
 			return nil, fmt.Errorf("AAQZ `println` expects a string argument, got %v", val)
@@ -188,23 +199,23 @@ func applyPrim(op string, values []Value) (Value, error) {
 		return StrV{str: input}, nil
 	case "seq":
 		if len(values) == 0 {
-		return nil, fmt.Errorf("AAQZ `seq` expects at least 1 argument, got: %v", values)
+			return nil, fmt.Errorf("AAQZ `seq` expects at least 1 argument, got: %v", values)
 		}
 		return values[len(values)-1], nil
 	case "++":
 		var result string
-    	for _, v := range values {
-       		switch v := v.(type) {
-        	case NumV:
-            	result += fmt.Sprintf("%f", v.n) 
-        	case StrV:
-            	result += v.str 
-        	case BoolV:
-            	result += fmt.Sprintf("%t", v.b) 
-       		default:
-            	return nil, fmt.Errorf("AAQZ unsupported value type for ++: %v", v)
-        	}	
-    	}
+		for _, v := range values {
+			switch v := v.(type) {
+			case NumV:
+				result += fmt.Sprintf("%f", v.n)
+			case StrV:
+				result += v.str
+			case BoolV:
+				result += fmt.Sprintf("%t", v.b)
+			default:
+				return nil, fmt.Errorf("AAQZ unsupported value type for ++: %v", v)
+			}
+		}
 		return StrV{str: result}, nil
 	case "equal?":
 		if len(values) != 2 {
@@ -276,13 +287,13 @@ func checkDupArgs(args []string) error {
 }
 
 func isValidId(id interface{}) bool {
-	// Check if `id` is a string
-	str, ok := id.(string)
+	// Check if `id` is a Symbol
+	str, ok := id.(Symbol)
 	if !ok {
 		return false
 	}
 
-	reserved := map[string]bool{
+	reserved := map[Symbol]bool{
 		"if":   true,
 		"=":    true,
 		"bind": true,
@@ -297,68 +308,124 @@ func isValidId(id interface{}) bool {
 
 func parse(s interface{}) (ExprC, error) {
 	switch v := s.(type) {
-		case float64: // <num>
-			return NumC{n: v}, nil
-		case string: // <id>
-			if isValidId(v) {
-				return IdC{name: v}, nil
-			}
-			return nil, fmt.Errorf("invalid identifier: %v", v)
-		case []interface{}: // List handling
-			if len(v) == 0 {
-				return nil, fmt.Errorf("invalid syntax: empty list")
-			}
-	
-			switch head := v[0].(type) {
-			case string:
-				switch head {
-				case "if": // { if <expr> <expr> <expr> }
-					if len(v) != 4 {
-						return nil, fmt.Errorf("invalid if expression: %v", v)
-					}
-					cond, err := parse(v[1])
-					if err != nil {
-						return nil, err
-					}
-					thenExpr, err := parse(v[2])
-					if err != nil {
-						return nil, err
-					}
-					elseExpr, err := parse(v[3])
-					if err != nil {
-						return nil, err
-					}
-					return IfC{cond: cond, True: thenExpr, False: elseExpr}, nil
-	// idk how to do bind
-	
-				default: // { <expr> <expr>* }
-					funcExpr, err := parse(head)
-					if err != nil {
-						return nil, err
-					}
-					args := []ExprC{}
-					for _, arg := range v[1:] {
-						argExpr, err := parse(arg)
-						if err != nil {
-							return nil, err
-						}
-						args = append(args, argExpr)
-					}
-					return AppC{fun: funcExpr, args: args}, nil
-				}
-			default:
-				return nil, fmt.Errorf("invalid expression head: %v", head)
-			}
-	
-		default:
-			return nil, fmt.Errorf("invalid syntax: %v", s)
+	case float64: // <num>
+		return NumC{n: v}, nil
+	case Symbol: // <id>
+		if isValidId(v) {
+			return IdC{name: v}, nil
 		}
+		return nil, fmt.Errorf("invalid identifier: %v", v)
+	case []interface{}: // List handling
+		if len(v) == 0 {
+			return nil, fmt.Errorf("invalid syntax: empty list")
+		}
+
+		switch head := v[0].(type) {
+		case Symbol:
+			switch head {
+			case "if": // { if <expr> <expr> <expr> }
+				if len(v) != 4 {
+					return nil, fmt.Errorf("invalid if expression: %v", v)
+				}
+				cond, err := parse(v[1])
+				if err != nil {
+					return nil, err
+				}
+				thenExpr, err := parse(v[2])
+				if err != nil {
+					return nil, err
+				}
+				elseExpr, err := parse(v[3])
+				if err != nil {
+					return nil, err
+				}
+				return IfC{cond: cond, True: thenExpr, False: elseExpr}, nil
+				// idk how to do bind
+
+			default: // { <expr> <expr>* }
+				funcExpr, err := parse(head)
+				if err != nil {
+					return nil, err
+				}
+				args := []ExprC{}
+				for _, arg := range v[1:] {
+					argExpr, err := parse(arg)
+					if err != nil {
+						return nil, err
+					}
+					args = append(args, argExpr)
+				}
+				return AppC{fun: funcExpr, args: args}, nil
+			}
+		default:
+			return nil, fmt.Errorf("invalid expression head: %v", head)
+		}
+
+	default:
+		return nil, fmt.Errorf("invalid syntax: %v", s)
 	}
-
-
+}
 
 func main() {
 	fmt.Println("Hi Chenyi, Katy, and Sharon")
-	
-	fmt.Println(topEnv)
+	// testing println
+	println_expr := AppC{
+		fun:  IdC{name: "println"},
+		args: []ExprC{StrC{str: "hello"}},
+	}
+	_, err1 := interp(println_expr, topEnv)
+	if err1 != nil {
+		fmt.Printf("Error: %v\n", err1)
+	}
+
+	// testing readstr
+	readstr_expr := AppC{
+		fun:  IdC{name: "read-str"},
+		args: []ExprC{},
+	}
+	_, err2 := interp(readstr_expr, topEnv)
+	if err2 != nil {
+		fmt.Printf("Error: %v\n", err2)
+	}
+
+	// testing readnum
+	readnum_expr := AppC{
+		fun:  IdC{name: "read-num"},
+		args: []ExprC{},
+	}
+	_, err3 := interp(readnum_expr, topEnv)
+	if err3 != nil {
+		fmt.Printf("Error: %v\n", err3)
+	}
+
+	// seq
+	seq_expr := AppC{
+		fun: IdC{name: "seq"},
+		args: []ExprC{
+			AppC{
+				fun: IdC{name: "println"},
+				args: []ExprC{
+					StrC{"huh"},
+				},
+			},
+			AppC{
+				fun: IdC{name: "+"},
+				args: []ExprC{
+					NumC{n: 4},
+					NumC{n: 5},
+				},
+			},
+			AppC{
+				fun: IdC{name: "println"},
+				args: []ExprC{
+					StrC{"added 4 + 5"},
+				},
+			},
+		},
+	}
+	_, err4 := interp(seq_expr, topEnv)
+	if err4 != nil {
+		fmt.Printf("Error: %v\n", err4)
+	}
+
 }

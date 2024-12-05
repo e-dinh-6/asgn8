@@ -23,3 +23,35 @@ func TestIsValidId(t *testing.T) {
 		}
 	}
 }
+
+func TestParseNum(t *testing.T) {
+	expected := NumC{n: 42.0}
+	result, err := parse(42.0)
+	if err != nil {
+		t.Fatalf("Expected no error, but got: %v", err)
+	}
+
+	if num, ok := result.(NumC); ok {
+		if num.n != expected.n {
+			t.Errorf("Expected %v, but got %v", expected.n, num.n)
+		}
+	} else {
+		t.Errorf("Expected NumC, but got %T", result)
+	}
+}
+
+func TestParseStr(t *testing.T) {
+	expected := StrC{str: "hi"}
+	result, err := parse("hi")
+	if err != nil {
+		t.Fatalf("Expected no error, but got: %v", err)
+	}
+
+	if num, ok := result.(StrC); ok {
+		if num.str != expected.str {
+			t.Errorf("Expected %v, but got %v", expected.str, num.str)
+		}
+	} else {
+		t.Errorf("Expected NumC, but got %T", result)
+	}
+}
