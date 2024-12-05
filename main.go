@@ -244,7 +244,7 @@ func applyPrim(op Symbol, values []Value) (Value, error) {
 		return nil, fmt.Errorf("AAQZ user-error: %v", values[0])
 	default:
 		if len(values) != 2 {
-			return nil, fmt.Errorf("AAQZ Arithmetic operations expect 2 arguments, got: %v", values)
+			return nil, fmt.Errorf("AAQZ Arithmetic operations expect 2 arguments, got: %v", len(values))
 		}
 		first, second := values[0], values[1]
 		switch first := first.(type) {
@@ -310,6 +310,8 @@ func parse(s interface{}) (ExprC, error) {
 	switch v := s.(type) {
 	case float64: // <num>
 		return NumC{n: v}, nil
+	case string: 
+		return StrC{str : v}, nil
 	case Symbol: // <id>
 		if isValidId(v) {
 			return IdC{name: v}, nil
@@ -321,7 +323,7 @@ func parse(s interface{}) (ExprC, error) {
 		}
 
 		switch head := v[0].(type) {
-		case Symbol:
+		case interface{}:
 			switch head {
 			case "if": // { if <expr> <expr> <expr> }
 				if len(v) != 4 {
@@ -358,7 +360,7 @@ func parse(s interface{}) (ExprC, error) {
 				return AppC{fun: funcExpr, args: args}, nil
 			}
 		default:
-			return nil, fmt.Errorf("invalid expression head: %v", head)
+			return nil, fmt.Errorf("invalid expression head: %T", head)
 		}
 
 	default:
