@@ -8,12 +8,12 @@ func TestIsValidId(t *testing.T) {
 		input    interface{}
 		expected bool
 	}{
-		{"if", false},
-		{"bind", false},
-		{"validId", true},
-		{"=>", false},
+		{Symbol("if"), false},
+		{Symbol("bind"), false},
+		{Symbol("validId"), true},
+		{Symbol("=>"), false},
 		{42, false},
-		{"=", false},
+		{Symbol("="), false},
 	}
 
 	for _, test := range tests {

@@ -1,9 +1,11 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 //example test
-
 
 func TestNumCtoV(t *testing.T) {
 	topEnv := []Binding{
@@ -39,7 +41,7 @@ func TestInterpNumC(t *testing.T) {
 	env := Env{}
 	result, err := interp(expr, env)
 	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
+		t.Errorf("Expected no error, got: %v", err)
 	}
 	if result != expectedValue {
 		t.Errorf("Expected %v, got %v", expectedValue, result)
@@ -52,7 +54,7 @@ func TestInterpStrC(t *testing.T) {
 	env := Env{}
 	result, err := interp(expr, env)
 	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
+		t.Errorf("Expected no error, got: %v", err)
 	}
 	if result != expectedValue {
 		t.Errorf("Expected %v, got %v", expectedValue, result)
@@ -79,9 +81,164 @@ func TestInterpIdC(t *testing.T) {
 	}
 	result, err := interp(expr, topEnv)
 	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
+		t.Errorf("Expected no error, got: %v", err)
 	}
 	if result != expectedValue {
 		t.Errorf("Expected %v, got %v", expectedValue, result)
+	}
+}
+
+func TestInterpLamC(t *testing.T) {
+	args := []Symbol{"x", "y"}
+	body := AppC{
+		fun: IdC{name: "+"},
+		args: []ExprC{
+			IdC{name: "x"},
+			IdC{name: "y"},
+		},
+	}
+	expr := LamC{args: args, body: body}
+	expectedValue := CloV{params: args, body: body, clo_env: topEnv}
+
+	result, err := interp(expr, topEnv)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// type check
+	clo, ok := result.(CloV)
+	if !ok {
+		t.Errorf("Expected result to be of type CloV, but got %T", result)
+	}
+
+	// deep equal b/c Go is pass-by-val
+	if !reflect.DeepEqual(clo, expectedValue) {
+		t.Errorf("Expected %v, got %v", expectedValue, clo)
+	}
+}
+
+func TestInterp_3_Plus_4(t *testing.T) {
+	expr := AppC{
+		fun: IdC{name: "+"},
+		args: []ExprC{
+			NumC{n: 3},
+			NumC{n: 4},
+		},
+	}
+	expectedValue := NumV{n: 7}
+
+	result, err := interp(expr, topEnv)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// type check
+	num, ok := result.(NumV)
+	if !ok {
+		t.Errorf("Expected result to be of type NumV, but got %T", result)
+	}
+	// deep equal b/c Go is pass-by-val
+	if !reflect.DeepEqual(num, expectedValue) {
+		t.Errorf("Expected %v, got %v", expectedValue, num)
+	}
+}
+
+func TestInterpAppCLamC(t *testing.T) {
+	expr := AppC{
+		fun: IdC{name: "+"},
+		args: []ExprC{
+			NumC{n: 3},
+			NumC{n: 4},
+		},
+	}
+	expectedValue := NumV{n: 7}
+
+	result, err := interp(expr, topEnv)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// type check
+	num, ok := result.(NumV)
+	if !ok {
+		t.Errorf("Expected result to be of type NumV, but got %T", result)
+	}
+	// deep equal b/c Go is pass-by-val
+	if !reflect.DeepEqual(num, expectedValue) {
+		t.Errorf("Expected %v, got %v", expectedValue, num)
+	}
+}
+func TestInterpFactorial(t *testing.T) {
+	// (AppC (LamC '(fact) (AppC (IdC 'fact) (list (IdC 'fact) (NumC 4))))
+	//       (list (LamC '(self n)
+	//                   (IfC (AppC (IdC '<=) (list (IdC 'n) (NumC 0)))
+	//                        (NumC 1)
+	//                        (AppC (IdC '*) (list (IdC 'n)
+	//                              (AppC (IdC 'self)
+	//                                    (list (IdC 'self)
+	//                                          (AppC (IdC '-')
+	//                                                (list (IdC 'n) (NumC 1)))))))))
+
+	// LamC of the Bind - writing it here b/c its too much to nest
+	factorialLambda := LamC{
+		args: []Symbol{"self", "n"},
+		body: IfC{
+			cond: AppC{
+				fun: IdC{name: "<="},
+				args: []ExprC{
+					IdC{name: "n"},
+					NumC{n: 0},
+				},
+			},
+			True: NumC{n: 1},
+			False: AppC{
+				fun: IdC{name: "*"},
+				args: []ExprC{
+					IdC{name: "n"},
+					AppC{
+						fun: IdC{name: "self"},
+						args: []ExprC{
+							IdC{name: "self"},
+							AppC{
+								fun: IdC{name: "-"},
+								args: []ExprC{
+									IdC{name: "n"},
+									NumC{n: 1},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Outer AppC expression
+	expr := AppC{
+		fun: LamC{
+			args: []Symbol{"fact"},
+			body: AppC{
+				fun: IdC{name: "fact"},
+				args: []ExprC{
+					IdC{name: "fact"},
+					NumC{n: 4},
+				},
+			},
+		},
+		args: []ExprC{
+			factorialLambda,
+		},
+	}
+	expectedValue := NumV{n: 24}
+	result, err := interp(expr, topEnv)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+	num, ok := result.(NumV)
+	if !ok {
+		t.Errorf("Expected result to be of type NumV, but got %T", result)
+	}
+	if num != expectedValue {
+		t.Errorf("Expected %v, got %v", expectedValue, num)
 	}
 }
