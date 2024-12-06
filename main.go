@@ -81,10 +81,6 @@ var topEnv = []Binding{
 	{"println", PrimV{"println"}},
 	{"read-num", PrimV{"read-num"}},
 	{"read-str", PrimV{"read-str"}},
-	{"++", PrimV{"++"}},
-	{"println", PrimV{"println"}},
-	{"read-num", PrimV{"read-num"}},
-	{"read-str", PrimV{"read-str"}},
 	{"seq", PrimV{"seq"}},
 	{"++", PrimV{"++"}},
 }
